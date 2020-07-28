@@ -43,13 +43,12 @@ int main(void)
 
 	// set some variables that are used to acquire data
 	int lowChan = 0;
-	int highChan = 0;
+	int highChan = 3;
 	AiInputMode inputMode;
 	Range range;
-	int samplesPerChannel = 64;
-	double rate = 5000;
+	int samplesPerChannel = 10000;
+	double rate = 100;
 	ScanOption scanOptions = (ScanOption) (SO_DEFAULTIO | SO_CONTINUOUS | SO_EXTTRIGGER);
-	//ScanOption scanOptions = (ScanOption) (SO_DEFAULTIO | SO_CONTINUOUS | SO_EXTTRIGGER);
 	AInScanFlag flags = AINSCAN_FF_DEFAULT;
 
 	int hasAI = 0;
@@ -175,20 +174,6 @@ int main(void)
 	// change the trigger type (or any other parameter)
 	//err = ulAInSetTrigger( daqDeviceHandle, triggerType, 0, 0.0, 0.0, 0);
 
-	// variables to measure time
-	struct timeval timer_usec;
-        long long int timestamp_usec_start, timestamp_usec_stop;
-        long long int timestamp_usec; /* timestamp in microsecond */
-        long long int timestamp_usec_prev;
-        long long int total_count;
-	int is_first_timetag = 0;
-
-	// other variables
-	int mem_totalcount = 0;
-	int retrigger = 0;
-
-	while(1==1) // for retriggering?
-	{
 	// start the acquisition
 	err = ulAInScan(daqDeviceHandle, lowChan, highChan, inputMode, range, samplesPerChannel, &rate, scanOptions, flags, buffer);
 
@@ -206,57 +191,31 @@ int main(void)
 
 		while(status == SS_RUNNING && err == ERR_NO_ERROR && !enter_press())
 		{
-			if(transferStatus.currentTotalCount > rate) 
-			{
-			break;
-			}
-			//printf("currentTotalCount = %-10llu \n", transferStatus.currentTotalCount);
-
-			if(is_first_timetag==0)
-			{
-				/* starting timestamp. */
-		                if (!gettimeofday(&timer_usec, NULL)) {
-               			timestamp_usec_start = ((long long int) timer_usec.tv_sec) * 1000000ll + (long long int) timer_usec.tv_usec;
-                		}
-                		else {
-                		timestamp_usec_start = -1;
-                		}
-                		printf("\nstart tag: %lld", timestamp_usec_start);
-				is_first_timetag = 1;
-			}
-
 			// get the current status of the acquisition
 			err = ulAInScanStatus(daqDeviceHandle, &status, &transferStatus);
 
 			index = transferStatus.currentIndex;
-			if(err == ERR_NO_ERROR && index >= 0 &&
-				transferStatus.currentTotalCount != mem_totalcount && transferStatus.currentTotalCount % samplesPerChannel == 0 &&
-				transferStatus.currentTotalCount < rate)
+			if(err == ERR_NO_ERROR && index >= 0)
 			{
-				mem_totalcount = transferStatus.currentTotalCount;
-				//resetCursor();
-				//printf("%-40s\n\n","Hit 'Enter' to terminate the process");
-				//printf("Active DAQ device: %s (%s)\n\n", devDescriptors[descriptorIndex].productName, devDescriptors[descriptorIndex].uniqueId);
-				//printf("actual scan rate = %f\n\n", rate);
+				resetCursor();
+				printf("%-40s\n\n","Hit 'Enter' to terminate the process");
+				printf("Active DAQ device: %s (%s)\n\n", devDescriptors[descriptorIndex].productName, devDescriptors[descriptorIndex].uniqueId);
+				printf("actual scan rate = %f\n\n", rate);
 
-				//printf("currentScanCount =  %-10llu \n", transferStatus.currentScanCount);
-				//printf("currentTotalCount = %-10llu \n", transferStatus.currentTotalCount);
-				//printf("currentIndex =      %-10d \n\n", index);
+				printf("currentScanCount =  %-10llu \n", transferStatus.currentScanCount);
+				printf("currentTotalCount = %-10llu \n", transferStatus.currentTotalCount);
+				printf("currentIndex =      %-10d \n\n", index);
 
-				/* Example of timestamp in microsecond. */
-                                if (!gettimeofday(&timer_usec, NULL)) {
-                                timestamp_usec = ((long long int) timer_usec.tv_sec) * 1000000ll + (long long int) timer_usec.tv_usec;
-                                }
-                                else {
-                                timestamp_usec = -1;
-                                }
-				printf("\nno-reps currentTotalCount = %-10llu - %lld microseconds since epoch. Previous ts: %lld Difference to last: %lld\n",
-					transferStatus.currentTotalCount, timestamp_usec, timestamp_usec_prev, timestamp_usec-timestamp_usec_prev);
-                                timestamp_usec_prev = timestamp_usec;
+				// display the data
+				for (i = 0; i < chanCount; i++)
+				{
+					printf("chan %d = %+-10.6f\n",
+							i + lowChan,
+							buffer[index + i]);
+				}
 
-				//usleep(1000);
+				usleep(100000);
 			}
-		total_count = transferStatus.currentTotalCount;
 		}
 
 		if (index < 0)
@@ -268,22 +227,11 @@ int main(void)
 			err = ulAInScanStop(daqDeviceHandle);
 		}
 	}
-	}
+
 	// disconnect from the DAQ device
 	ulDisconnectDaqDevice(daqDeviceHandle);
 
 end:
-
-	/* end timestamp. */
-        if (!gettimeofday(&timer_usec, NULL)) {
-        timestamp_usec_stop = ((long long int) timer_usec.tv_sec) * 1000000ll + (long long int) timer_usec.tv_usec;
-        }
-        else {
-        timestamp_usec_stop = -1;
-        }
-        printf("\nstop-start timetags: %lld Total count: %-10llu", timestamp_usec_stop-timestamp_usec_start, total_count);
-        printf("\nRate: %0.f Hz. One period (50Hz) has ~%0.f samples. Acquisition (should be) every: %d samples i.e. every %0.fus", rate, rate/50, samplesPerChannel, samplesPerChannel/rate*1000000);
-        printf("\nResulting average acquisition: total time/total acquisitions = %0.2f\n", (float)(timestamp_usec_stop-timestamp_usec_start)/((float)total_count/(float)samplesPerChannel));
 
 	ulReleaseDaqDevice(daqDeviceHandle);
 
